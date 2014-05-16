@@ -2,7 +2,7 @@
 MY_TEAMS = []
 
 # The Gmail search to find threads to label
-QUERY = 'in:inbox AND (from:"notifications@github.com" OR from:"noreply@github.com")'
+QUERY = '((is:muted AND newer_than:1d) OR in:inbox) AND (from:"notifications@github.com" OR from:"noreply@github.com")'
 
 # Finds team mentions for my teams and extracts the team name.
 MY_TEAMS_REGEX = new RegExp "(#{MY_TEAMS.join('|')})"
@@ -95,12 +95,19 @@ class Thread
     GmailApp.getMessagesForThreads(threads)
     new Thread(t) for t in threads
 
-  # Queue all threads to have the appropriate labels applied given our reason
-  # for receiving them.
+  # Process all threads:
+  #
+  # - Queue threads to have the appropriate labels applied given our reason
+  #   for receiving them.
+  # - Unmute any thread if we received it due to a direct mention or a team
+  #   mention.
   #
   # Returns nothing.
-  @labelAllForReason: ->
-    @all[id].labelForReason() for id in @ids when !@all[id].alreadyDone()
+  @processAll: ->
+    for id in @ids when !@all[id].alreadyDone()
+      thread = @all[id]
+      thread.labelForReason()
+      thread.unmuteIfMentioned()
 
   # Load a list of Thread ids that have already been labled. Because the ids
   # are based on the messages in the thread, new messages in a thread will
@@ -131,6 +138,36 @@ class Thread
     else
       []
 
+  # If this thread is muted, and the most recent message includes a direct
+  # mention or a team mention, then unmute the thread (i.e., move it to the
+  # inbox).
+  #
+  # Returns nothing.
+  unmuteIfMentioned: ->
+    return unless @hasDirectMentionInMostRecentMessage() || @hasTeamMentionInMostRecentMessage()
+
+    unless @_thread.isInInbox()
+      @queueLabel ["unmuted"]
+      @_thread.moveToInbox()
+
+  # Determine whether the most recent message in this thread contains a direct
+  # mention.
+  #
+  # Returns a Boolean.
+  hasDirectMentionInMostRecentMessage: ->
+    return false unless @reason().mention
+
+    @mostRecentMessage().plainBody().match("@jasonrudolph")
+
+  # Determine whether the most recent message in this thread contains a team
+  # mention.
+  #
+  # Returns a Boolean.
+  hasTeamMentionInMostRecentMessage: ->
+    return false unless @reason().team_mention
+
+    @mostRecentMessage().plainBody().match(@reason().team_mention)
+
   # Determine why we got this message and label the thread accordingly.
   #
   # Returns nothing.
@@ -142,11 +179,10 @@ class Thread
     else if reason.mention
       @queueLabel ["@"]
     else if reason.team_mention == true
-      @queueLabel ["@team"] # Unknown team mentioned
+      @queueLabel ["!unknown-team"] # Unknown team mentioned
     else if reason.team_mention
       teamNameWithoutOrg = reason.team_mention.replace /^@.*\//, "@"
       @queueLabel [teamNameWithoutOrg]
-      @queueLabel ["@team"]
     else if reason.meta
       @queueLabel ["meta"]
     else if reason.watching == true
@@ -171,15 +207,21 @@ class Thread
   # more information about the reason.
   reason: ->
     unless @_reason?
-      i = @messages.length - 1
-      @_reason = @messages[i].reason()
+      @_reason = @mostRecentMessage().reason()
 
       # Let's see if we can find what team was mentioned if this was a team mention.
+      i = @messages.length - 1
       while @_reason.team_mention == true and i >= 0
         @_reason = @messages[i].reason()
         i--
 
     @_reason
+
+  # Get the mostrecent message in this thread.
+  #
+  # Returns a Message.
+  mostRecentMessage: ->
+    @messages[@messages.length - 1]
 
   # Has this thread already been labeled?
   #
@@ -252,11 +294,14 @@ class Message
   dumpReason: ->
     JSON.stringify @reason()
 
+  plainBody: ->
+    @_body ||= @_message.getPlainBody()
+
   # Finds mentions of any team that I'm on.
   #
   # Returns an string team name or undefined.
   teamMention: ->
-    @_teamMention ||= if message = @_message.getPlainBody()
+    @_teamMention ||= if message = @plainBody()
       if match = message.match(MY_TEAMS_REGEX)
         match[1]
 
@@ -329,7 +374,7 @@ main = ->
   Thread.loadFromSearch QUERY
   Thread.loadDoneFromCache()
   Message.loadReasonsFromCache()
-  Thread.labelAllForReason()
+  Thread.processAll()
   Label.applyAll()
   Thread.dumpDoneToCache()
   Message.dumpReasonsToCache()
