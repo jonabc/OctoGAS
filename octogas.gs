@@ -1,9 +1,7 @@
-var BASE_LABEL, CACHE, CACHE_VERSION, Label, MY_TEAMS, MY_TEAMS_REGEX, Message, QUERY, Thread, main,
+var CACHE, CACHE_VERSION, Label, MY_TEAMS, MY_TEAMS_REGEX, Message, QUERY, Thread, main,
   __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
 
 MY_TEAMS = [];
-
-BASE_LABEL = ["GitHub"];
 
 QUERY = 'in:inbox AND (from:"notifications@github.com" OR from:"noreply@github.com")';
 
@@ -160,30 +158,32 @@ Thread = (function() {
   }
 
   Thread.prototype.labelForReason = function() {
-    var reason;
+    var reason, teamNameWithoutOrg;
     reason = this.reason();
     if (reason.author) {
-      return this.queueLabel(["Author"]);
+      this.queueLabel(["@"]);
+      return this.queueLabel(["author"]);
     } else if (reason.mention) {
-      return this.queueLabel(["Direct Mention"]);
+      return this.queueLabel(["@"]);
     } else if (reason.team_mention === true) {
-      return this.queueLabel(["Team Mention"]);
+      return this.queueLabel(["@team"]);
     } else if (reason.team_mention) {
-      return this.queueLabel(["Team Mention", reason.team_mention]);
+      teamNameWithoutOrg = reason.team_mention.replace(/^@.*\//, "@");
+      this.queueLabel([teamNameWithoutOrg]);
+      return this.queueLabel(["@team"]);
     } else if (reason.meta) {
-      return this.queueLabel(["Meta"]);
+      return this.queueLabel(["meta"]);
     } else if (reason.watching === true) {
-      return this.queueLabel(["Watching"]);
+      return this.queueLabel(["watching"]);
     } else if (reason.watching) {
-      return this.queueLabel(["Watching", reason.watching]);
+      return this.queueLabel(["watching"]);
     } else {
-      return this.queueLabel(["Unknown"]);
+      return this.queueLabel(["unknown"]);
     }
   };
 
   Thread.prototype.queueLabel = function(name_parts) {
     var label;
-    name_parts = BASE_LABEL.concat(name_parts);
     label = Label.findOrCreate(name_parts);
     return label.queue(this);
   };
