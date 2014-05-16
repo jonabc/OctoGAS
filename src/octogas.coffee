@@ -330,4 +330,3 @@ main = ->
   Label.applyAll()
   Thread.dumpDoneToCache()
   Message.dumpReasonsToCache()
-
