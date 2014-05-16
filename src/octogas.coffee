@@ -1,9 +1,6 @@
 # An Array of teams I'm on. Eg ["@myorg/myteam"]
 MY_TEAMS = []
 
-# Base label name to apply to nest all other labels under.
-BASE_LABEL = ["GitHub"]
-
 # The Gmail search to find threads to label
 QUERY = 'in:inbox AND (from:"notifications@github.com" OR from:"noreply@github.com")'
 
@@ -162,7 +159,6 @@ class Thread
   #
   # Returns nothing.
   queueLabel: (name_parts) ->
-    name_parts = BASE_LABEL.concat name_parts
     label = Label.findOrCreate name_parts
     label.queue @
 
