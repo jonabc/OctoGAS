@@ -137,21 +137,24 @@ class Thread
   labelForReason: ->
     reason = @reason()
     if reason.author
-      @queueLabel ["Author"]
+      @queueLabel ["@"]
+      @queueLabel ["author"]
     else if reason.mention
-      @queueLabel ["Direct Mention"]
+      @queueLabel ["@"]
     else if reason.team_mention == true
-      @queueLabel ["Team Mention"] # Unknown team mentioned
+      @queueLabel ["@team"] # Unknown team mentioned
     else if reason.team_mention
-      @queueLabel ["Team Mention", reason.team_mention]
+      teamNameWithoutOrg = reason.team_mention.replace /^@.*\//, "@"
+      @queueLabel [teamNameWithoutOrg]
+      @queueLabel ["@team"]
     else if reason.meta
-      @queueLabel ["Meta"]
+      @queueLabel ["meta"]
     else if reason.watching == true
-      @queueLabel ["Watching"] # Unknown watched repo (maybe?).
+      @queueLabel ["watching"] # Unknown watched repo (maybe?).
     else if reason.watching
-      @queueLabel ["Watching", reason.watching]
+      @queueLabel ["watching"]
     else
-      @queueLabel ["Unknown"]
+      @queueLabel ["unknown"]
 
   # Queue this thread to be given a label.
   #
