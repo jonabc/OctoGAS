@@ -91,8 +91,6 @@ class Thread
   # Returns an Array of Threads.
   @loadFromSearch: (query) ->
     threads = GmailApp.search(query)
-    # Preload all the messages to speed things up.
-    GmailApp.getMessagesForThreads(threads)
     new Thread(t) for t in threads
 
   # Process all threads:
