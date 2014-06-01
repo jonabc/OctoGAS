@@ -3,7 +3,7 @@ var CACHE, CACHE_VERSION, Label, MY_TEAMS, MY_TEAMS_REGEX, Message, QUERY, Threa
 
 MY_TEAMS = [];
 
-QUERY = 'in:inbox AND (from:"notifications@github.com" OR from:"noreply@github.com")';
+QUERY = '((is:muted AND newer_than:1d) OR in:inbox) AND (from:"notifications@github.com" OR from:"noreply@github.com")';
 
 MY_TEAMS_REGEX = new RegExp("(" + (MY_TEAMS.join('|')) + ")");
 
@@ -102,7 +102,6 @@ Thread = (function() {
   Thread.loadFromSearch = function(query) {
     var t, threads, _i, _len, _results;
     threads = GmailApp.search(query);
-    GmailApp.getMessagesForThreads(threads);
     _results = [];
     for (_i = 0, _len = threads.length; _i < _len; _i++) {
       t = threads[_i];
@@ -111,15 +110,18 @@ Thread = (function() {
     return _results;
   };
 
-  Thread.labelAllForReason = function() {
-    var id, _i, _len, _ref, _results;
+  Thread.processAll = function() {
+    var id, thread, _i, _len, _ref, _results;
     _ref = this.ids;
     _results = [];
     for (_i = 0, _len = _ref.length; _i < _len; _i++) {
       id = _ref[_i];
-      if (!this.all[id].alreadyDone()) {
-        _results.push(this.all[id].labelForReason());
+      if (!(!this.all[id].alreadyDone())) {
+        continue;
       }
+      thread = this.all[id];
+      thread.labelForReason();
+      _results.push(thread.unmuteIfMentioned());
     }
     return _results;
   };
@@ -157,6 +159,30 @@ Thread = (function() {
     }).call(this);
   }
 
+  Thread.prototype.unmuteIfMentioned = function() {
+    if (!(this.hasDirectMentionInMostRecentMessage() || this.hasTeamMentionInMostRecentMessage())) {
+      return;
+    }
+    if (!this._thread.isInInbox()) {
+      this.queueLabel(["unmuted"]);
+      return this._thread.moveToInbox();
+    }
+  };
+
+  Thread.prototype.hasDirectMentionInMostRecentMessage = function() {
+    if (!this.reason().mention) {
+      return false;
+    }
+    return this.mostRecentMessage().plainBody().match("@jasonrudolph");
+  };
+
+  Thread.prototype.hasTeamMentionInMostRecentMessage = function() {
+    if (!this.reason().team_mention) {
+      return false;
+    }
+    return this.mostRecentMessage().plainBody().match(this.reason().team_mention);
+  };
+
   Thread.prototype.labelForReason = function() {
     var reason, teamNameWithoutOrg;
     reason = this.reason();
@@ -166,11 +192,10 @@ Thread = (function() {
     } else if (reason.mention) {
       return this.queueLabel(["@"]);
     } else if (reason.team_mention === true) {
-      return this.queueLabel(["@team"]);
+      return this.queueLabel(["!unknown-team"]);
     } else if (reason.team_mention) {
       teamNameWithoutOrg = reason.team_mention.replace(/^@.*\//, "@");
-      this.queueLabel([teamNameWithoutOrg]);
-      return this.queueLabel(["@team"]);
+      return this.queueLabel([teamNameWithoutOrg]);
     } else if (reason.meta) {
       return this.queueLabel(["meta"]);
     } else if (reason.watching === true) {
@@ -191,14 +216,18 @@ Thread = (function() {
   Thread.prototype.reason = function() {
     var i;
     if (this._reason == null) {
+      this._reason = this.mostRecentMessage().reason();
       i = this.messages.length - 1;
-      this._reason = this.messages[i].reason();
       while (this._reason.team_mention === true && i >= 0) {
         this._reason = this.messages[i].reason();
         i--;
       }
     }
     return this._reason;
+  };
+
+  Thread.prototype.mostRecentMessage = function() {
+    return this.messages[this.messages.length - 1];
   };
 
   Thread.prototype.alreadyDone = function() {
@@ -287,9 +316,13 @@ Message = (function() {
     return JSON.stringify(this.reason());
   };
 
+  Message.prototype.plainBody = function() {
+    return this._body || (this._body = this._message.getPlainBody());
+  };
+
   Message.prototype.teamMention = function() {
     var match, message;
-    return this._teamMention || (this._teamMention = (message = this._message.getPlainBody()) ? (match = message.match(MY_TEAMS_REGEX)) ? match[1] : void 0 : void 0);
+    return this._teamMention || (this._teamMention = (message = this.plainBody()) ? (match = message.match(MY_TEAMS_REGEX)) ? match[1] : void 0 : void 0);
   };
 
   Message.prototype.from = function() {
@@ -347,7 +380,7 @@ function main() {
   Thread.loadFromSearch(QUERY);
   Thread.loadDoneFromCache();
   Message.loadReasonsFromCache();
-  Thread.labelAllForReason();
+  Thread.processAll();
   Label.applyAll();
   Thread.dumpDoneToCache();
   return Message.dumpReasonsToCache();
