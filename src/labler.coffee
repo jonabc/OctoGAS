@@ -2,7 +2,11 @@
 MY_TEAMS = []
 
 # The Gmail search to find threads to label
-QUERY = '((is:muted AND newer_than:1d) OR in:inbox) AND (from:"notifications@github.com" OR from:"noreply@github.com")'
+QUERY = "in:inbox AND
+         (
+           from:\"notifications@github.com\" OR
+           from:\"noreply@github.com\"
+         )"
 
 # Finds team mentions for my teams and extracts the team name.
 MY_TEAMS_REGEX = new RegExp "(#{MY_TEAMS.join('|')})"
@@ -91,21 +95,17 @@ class Thread
   # Returns an Array of Threads.
   @loadFromSearch: (query) ->
     threads = GmailApp.search(query)
+
+    # Preload all the messages to speed things up.
+    GmailApp.getMessagesForThreads(threads)
     new Thread(t) for t in threads
 
-  # Process all threads:
-  #
-  # - Queue threads to have the appropriate labels applied given our reason
-  #   for receiving them.
-  # - Unmute any thread if we received it due to a direct mention or a team
-  #   mention.
+  # Queue all threads to have the appropriate labels applied given our reason
+  # for receiving them.
   #
   # Returns nothing.
-  @processAll: ->
-    for id in @ids when !@all[id].alreadyDone()
-      thread = @all[id]
-      thread.labelForReason()
-      thread.unmuteIfMentioned()
+  @labelAllForReason: ->
+    @all[id].labelForReason() for id in @ids when !@all[id].alreadyDone()
 
   # Load a list of Thread ids that have already been labled. Because the ids
   # are based on the messages in the thread, new messages in a thread will
@@ -131,40 +131,7 @@ class Thread
     @id = @_thread.getId()
     Thread.all[@id] = @
     Thread.ids.push @id
-    @messages = if mess = @_thread.getMessages()
-      new Message(m) for m in mess
-    else
-      []
-
-  # If this thread is muted, and the most recent message includes a direct
-  # mention or a team mention, then unmute the thread (i.e., move it to the
-  # inbox).
-  #
-  # Returns nothing.
-  unmuteIfMentioned: ->
-    return unless @hasDirectMentionInMostRecentMessage() || @hasTeamMentionInMostRecentMessage()
-
-    unless @_thread.isInInbox()
-      @queueLabel ["unmuted"]
-      @_thread.moveToInbox()
-
-  # Determine whether the most recent message in this thread contains a direct
-  # mention.
-  #
-  # Returns a Boolean.
-  hasDirectMentionInMostRecentMessage: ->
-    return false unless @reason().mention
-
-    @mostRecentMessage().plainBody().match("@jasonrudolph")
-
-  # Determine whether the most recent message in this thread contains a team
-  # mention.
-  #
-  # Returns a Boolean.
-  hasTeamMentionInMostRecentMessage: ->
-    return false unless @reason().team_mention
-
-    @mostRecentMessage().plainBody().match(@reason().team_mention)
+    @messages = (new Message(m) for m in @_thread.getMessages() || [])
 
   # Determine why we got this message and label the thread accordingly.
   #
@@ -204,22 +171,16 @@ class Thread
   # Returns an Object where the key is the name of the reason and the value is
   # more information about the reason.
   reason: ->
-    unless @_reason?
-      @_reason = @mostRecentMessage().reason()
+    unless @_reason? || @messages.length == 0
+      i = @messages.length - 1
+      @_reason = @messages[i].reason()
 
       # Let's see if we can find what team was mentioned if this was a team mention.
-      i = @messages.length - 1
       while @_reason.team_mention == true and i >= 0
         @_reason = @messages[i].reason()
         i--
 
     @_reason
-
-  # Get the mostrecent message in this thread.
-  #
-  # Returns a Message.
-  mostRecentMessage: ->
-    @messages[@messages.length - 1]
 
   # Has this thread already been labeled?
   #
@@ -292,14 +253,11 @@ class Message
   dumpReason: ->
     JSON.stringify @reason()
 
-  plainBody: ->
-    @_body ||= @_message.getPlainBody()
-
   # Finds mentions of any team that I'm on.
   #
   # Returns an string team name or undefined.
   teamMention: ->
-    @_teamMention ||= if message = @plainBody()
+    @_teamMention ||= if message = @_message.getPlainBody()
       if match = message.match(MY_TEAMS_REGEX)
         match[1]
 
@@ -365,14 +323,11 @@ class Message
       headers[key] = value
 
 # Find all GitHub notifications in inbox and label them appropriately.
-#
-# Returns nothing.
-main = ->
-  Label.loadPersisted()
-  Thread.loadFromSearch QUERY
-  Thread.loadDoneFromCache()
-  Message.loadReasonsFromCache()
-  Thread.processAll()
-  Label.applyAll()
-  Thread.dumpDoneToCache()
-  Message.dumpReasonsToCache()
+Label.loadPersisted()
+Thread.loadFromSearch QUERY
+Thread.loadDoneFromCache()
+Message.loadReasonsFromCache()
+Thread.labelAllForReason()
+Label.applyAll()
+Thread.dumpDoneToCache()
+Message.dumpReasonsToCache()
