@@ -1,5 +1,5 @@
 function labler() {
-  var CACHE, CACHE_VERSION, Label, MY_TEAMS, MY_TEAMS_REGEX, Message, QUERY, Thread,
+  var CACHE, CACHE_VERSION, Label, MY_TEAMS, MY_TEAMS_REGEX, Message, QUERY, Thread, error,
     __indexOf = [].indexOf || function(item) { for (var i = 0, l = this.length; i < l; i++) { if (i in this && this[i] === item) return i; } return -1; };
 
   MY_TEAMS = [];
@@ -70,7 +70,7 @@ function labler() {
     };
 
     Label.prototype.apply = function() {
-      var t, threads;
+      var t, threads, _i, _len, _ref, _ref1;
       threads = (function() {
         var _i, _len, _ref, _results;
         _ref = this._queue;
@@ -81,6 +81,13 @@ function labler() {
         }
         return _results;
       }).call(this);
+      _ref = this._queue;
+      for (_i = 0, _len = _ref.length; _i < _len; _i++) {
+        t = _ref[_i];
+        if (_ref1 = t.id, __indexOf.call(Thread.done, _ref1) < 0) {
+          Thread.done.push(t.id);
+        }
+      }
       if (threads.length) {
         this._label.addToThreads(threads);
       }
@@ -134,7 +141,7 @@ function labler() {
     };
 
     Thread.dumpDoneToCache = function() {
-      return CACHE.put(this.doneKey, JSON.stringify(this.ids));
+      return CACHE.put(this.doneKey, JSON.stringify(this.done));
     };
 
     function Thread(_thread) {
@@ -229,7 +236,9 @@ function labler() {
       _ref = this.keys;
       for (_i = 0, _len = _ref.length; _i < _len; _i++) {
         k = _ref[_i];
-        reasons[k] = this.all[k].dumpReason();
+        if (this.all[k]._reason != null) {
+          reasons[k] = JSON.stringify(this.all[k]._reason);
+        }
       }
       return CACHE.putAll(reasons);
     };
@@ -278,10 +287,6 @@ function labler() {
       if (reason != null) {
         return this._reason = JSON.parse(reason);
       }
-    };
-
-    Message.prototype.dumpReason = function() {
-      return JSON.stringify(this.reason());
     };
 
     Message.prototype.teamMention = function() {
@@ -347,12 +352,20 @@ function labler() {
 
   Message.loadReasonsFromCache();
 
-  Thread.labelAllForReason();
-
-  Label.applyAll();
-
-  Thread.dumpDoneToCache();
-
-  Message.dumpReasonsToCache();
+  try {
+    Thread.labelAllForReason();
+  } catch (_error) {
+    error = _error;
+    Logger.log(error);
+  } finally {
+    try {
+      Label.applyAll();
+    } catch (_error) {
+      Logger.log(error);
+    } finally {
+      Thread.dumpDoneToCache();
+      Message.dumpReasonsToCache();
+    }
+  }
 
 }

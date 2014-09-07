@@ -78,6 +78,7 @@ class Label
   # Returns nothing.
   apply: ->
     threads = (t._thread for t in @_queue)
+    Thread.done.push(t.id) for t in @_queue when t.id not in Thread.done
     @_label.addToThreads threads if threads.length
     @_queue = []
 
@@ -120,7 +121,7 @@ class Thread
   #
   # Returns nothing.
   @dumpDoneToCache: ->
-    CACHE.put @doneKey, JSON.stringify(@ids)
+    CACHE.put @doneKey, JSON.stringify(@done)
 
   # Instantiate a Thread.
   #
@@ -205,7 +206,7 @@ class Message
   # Returns nothing.
   @dumpReasonsToCache: ->
     reasons = {}
-    reasons[k] = @all[k].dumpReason() for k in @keys
+    reasons[k] = JSON.stringify(@all[k]._reason) for k in @keys when @all[k]._reason?
     CACHE.putAll reasons
 
   # Instantiate a new Message object.
@@ -246,12 +247,6 @@ class Message
   # Returns nothing.
   loadReason: (reason) ->
     @_reason = JSON.parse(reason) if reason?
-
-  # Dumps the reason to a String.
-  #
-  # Returns JSON String reason.
-  dumpReason: ->
-    JSON.stringify @reason()
 
   # Finds mentions of any team that I'm on.
   #
@@ -327,7 +322,15 @@ Label.loadPersisted()
 Thread.loadFromSearch QUERY
 Thread.loadDoneFromCache()
 Message.loadReasonsFromCache()
-Thread.labelAllForReason()
-Label.applyAll()
-Thread.dumpDoneToCache()
-Message.dumpReasonsToCache()
+try
+  Thread.labelAllForReason()
+catch error
+  Logger.log error
+finally
+  try
+    Label.applyAll()
+  catch
+    Logger.log error
+  finally
+    Thread.dumpDoneToCache()
+    Message.dumpReasonsToCache()
