@@ -1,6 +1,12 @@
 # An Array of teams I'm on. Eg ["@myorg/myteam"]
 MY_TEAMS = []
 
+# Base label name to apply to nest all other labels under.
+BASE_LABEL = ["GitHub"]
+
+# Archive your messages after labeling.
+SHOULD_ARCHIVE = false
+
 # The Gmail search to find threads to label
 QUERY = "in:inbox AND
          (
@@ -122,6 +128,13 @@ class Thread
   # Returns nothing.
   @dumpDoneToCache: ->
     CACHE.put @doneKey, JSON.stringify(@done)
+
+  # Archive all the messages in every thread.
+  #
+  # Returns nothing.
+  @archiveAll: ->
+    threadsToArchive = (Thread.all[id]._thread for id in @ids when !Thread.all[id].alreadyDone())
+    GmailApp.moveThreadsToArchive(threadsToArchive)
 
   # Instantiate a Thread.
   #
@@ -268,7 +281,7 @@ class Message
   #
   # Retruns a String or undefined.
   firstAddressInHeader: (header) ->
-    (@headers()[header].match(/.*? <(.*)>/) || [])[1]
+    @headers()[header]?.match(/.*? <(.*)>/)?[1]
 
   # The the name our of an address header like "From: Foo Bar <foobar@gmail.com>"
   #
@@ -324,6 +337,7 @@ Thread.loadDoneFromCache()
 Message.loadReasonsFromCache()
 try
   Thread.labelAllForReason()
+  Thread.archiveAll() if SHOULD_ARCHIVE
 catch error
   Logger.log error
 finally
