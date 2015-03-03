@@ -1,4 +1,14 @@
 # An Array of teams I'm on. Eg ["@myorg/myteam"]
+#
+# Using curl and jq (http://stedolan.github.io/jq/), we can get a formatted list
+# of fully-qualified team names:
+#
+#   $ curl -n https://api.github.com/user/teams | jq '.[] | [.organization.login, .slug] | "@\(.[0])/\(.[1])"'
+#
+#   "@some-org/api"
+#   "@some-org/engineering"
+#   "@some-other-org/mac"
+#
 MY_TEAMS = []
 
 # Base label name to apply to nest all other labels under.
