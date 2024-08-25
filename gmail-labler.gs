@@ -410,7 +410,7 @@ function labler() {
             case 'team_mention':
               return {
                 team_mention: this.teamMention() || true,
-                watching: this.firstNameInHeader('List-ID') || true
+                watching: this.firstNameInHeader('List-ID') || this.firstNameInHeader('List-Id') || true
               };
             case 'author':
               return {
@@ -419,13 +419,13 @@ function labler() {
             case 'review_requested':
               return {
                 team_mention: this.teamMention() || true,
-                watching: this.firstNameInHeader('List-ID') || true
+                watching: this.firstNameInHeader('List-ID') || this.firstNameInHeader('List-Id') || true
               };
             default:
               switch (this.from()) {
                 case "notifications@github.com":
                   return {
-                    watching: this.firstNameInHeader('List-ID') || true
+                    watching: this.firstNameInHeader('List-ID') || this.firstNameInHeader('List-Id') || true
                   };
                 case "noreply@github.com":
                   return {
@@ -490,7 +490,8 @@ function labler() {
 
       // Retruns a String or undefined.
       firstNameInHeader(header) {
-        return (this.headers()[header].match(/(.*?) <.*>/) || [])[1];
+        var ref, ref1;
+        return (ref = this.headers()[header]) != null ? (ref1 = ref.match(/(.*?) <.*>/)) != null ? ref1[1] : void 0 : void 0;
       }
 
       // Load the SMTP headers from the raw message into an Object.
